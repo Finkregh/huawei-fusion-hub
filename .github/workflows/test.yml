@@ -14,14 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          # Home Assistant 2026.3 and later require Python 3.14: on an older
-          # interpreter pip silently falls back to the last release that still
-          # supports it, and the tests run against the wrong Home Assistant
-          python-version: "3.14"
+          # .python-version holds 3.14 because Home Assistant 2026.3 and later
+          # require it: on an older interpreter pip silently falls back to the
+          # last release that still supports it, and the tests would run
+          # against the wrong Home Assistant.
+          python-version-file: .python-version
       - name: Install dependencies
         # the floor matches hacs.json, so a fallback fails here instead
         run: pip install "homeassistant>=2026.8.0"
