@@ -301,12 +301,16 @@ def _build() -> list[HubSensorDef]:
            hs="active_grid_frequency", fsp=f"{PWS}:10007",
            fs=[f"{FS_PWS}:grid_frequency", f"{FS_GM}:grid_frequency", f"{FS_RINV}:elec_freq"]))
     d(_def("grid_exported_energy", "Grid exported energy", DM, "energy",
-           hs="grid_exported_energy",
+           hs=["grid_exported_energy", "total_feed_in_to_grid",
+               "total_negative_active_energy_built_in_energy",
+               "total_negative_active_energy_external_energy"],
            fsp=[f"{PWS}:10008", f"{PWS}:11116", f"{EMMA}:11116"],
            icon="mdi:transmission-tower-import",
            fs=[f"{FS_PWS}:reverse_active_cap", f"{FS_GM}:reverse_active_cap"]))
     d(_def("grid_imported_energy", "Grid imported energy", DM, "energy",
-           hs="grid_accumulated_energy",
+           hs=["grid_accumulated_energy", "total_supply_from_grid",
+               "total_positive_active_energy_built_in_energy",
+               "total_positive_active_energy_external_energy"],
            fsp=[f"{PWS}:10009", f"{PWS}:11115", f"{EMMA}:11115"],
            icon="mdi:transmission-tower-export",
            fs=[f"{FS_PWS}:active_cap", f"{FS_GM}:active_cap"]))
