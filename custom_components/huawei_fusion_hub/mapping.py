@@ -506,6 +506,12 @@ def _build() -> list[HubSensorDef]:
             diagnostic=True,
         )
     )
+    # inverter_yield_total is not a safe production meter across sources: the
+    # Modbus register is the inverter's AC output (it keeps counting after dark
+    # from battery discharge), while the FusionSolarPlus candidate is a
+    # plant-scoped total that also jumps at night. Same failure mode as #132:
+    # which source wins decides what the number means. Kept as-is because
+    # changing it would move existing statistics; tracked separately.
     d(
         _def(
             "inverter_yield_total",

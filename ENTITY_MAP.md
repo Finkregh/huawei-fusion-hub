@@ -71,6 +71,15 @@ have been possible.
 | `pv_2_current` | `pv_02_current` | `Inverter:11005` | `Residential inverter:pv2_i`, `String inverter:pv2_i` |
 | `pv_2_power` | — | `Inverter:11006` | — |
 
+> **`inverter_yield_total` is not a production meter across sources.** The
+> Huawei Solar register is the inverter's AC output and keeps counting after
+> dark from battery discharge; the FusionSolarPlus candidate is a plant-scoped
+> total that jumps at night. A `_total` key whose meaning depends on which
+> source is currently winning is unsafe for energy statistics, and a source
+> flip also produces a `total_increasing` reset row that Home Assistant books
+> as production. Do not use it as a PV-yield sensor; the PV-only total is
+> `plant_energy_total` on a Modbus source.
+
 ## Power Meter (28 entities)
 
 | Hub entity (`sensor.hf_hub_…`) | Huawei Solar (Modbus) | FusionSolarPlus | FusionSolar |
