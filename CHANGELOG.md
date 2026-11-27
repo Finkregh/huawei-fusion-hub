@@ -38,6 +38,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   extra recorder load is not wanted. Reporting alone left the work to the user;
   enabling is the only way Home Assistant starts running a disabled entity, so it
   is the actual fix.
+- Enabling a source entity can change which source wins, and with it what a
+  `_total` key means: on one installation the combination of a source going away
+  and a single dip injected phantom energy into seven long-term statistics
+  (1081 kWh, 225 kWh, 3 × 184.49 kWh and 41.11 kWh) because a `total_increasing`
+  dip is booked as production. Worth knowing before enabling a restored fallback
+  on a key that mixes quantities — the mapping notes flag the known cases.
 
 ### Fixed
 
