@@ -39,6 +39,7 @@ from .const import (
     DEFAULT_RESERVE_SOC,
     DEVICE_NAMES,
     DOMAIN,
+    ISSUE_DISABLED_FALLBACK_ENTITIES,
     ISSUE_DISABLED_SOURCE_ENTITIES,
     KEY_BATTERY_CAPACITY,
     KEY_BATTERY_POWER,
@@ -165,6 +166,16 @@ def critical_disabled_candidates(
         for key, per_source in disabled.items()
         if key in candidates and set(candidates[key]) <= set(per_source)
     }
+
+
+def _distinct_ids(report: dict[str, dict[str, str]]) -> list[str]:
+    """The source entity IDs of a report, ordered and without duplicates."""
+    seen: dict[str, None] = {}
+    for entity_id in (
+        entity_id for per_source in report.values() for entity_id in per_source.values()
+    ):
+        seen.setdefault(entity_id, None)
+    return list(seen)
 
 
 class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
@@ -437,57 +448,86 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         )
 
     def _report_disabled_candidates(self) -> None:
-        """Log and raise a repair for source entities the hub can never read.
+        """Log and raise repairs for source entities the hub can never read.
 
-        Runs on every discovery pass, so enabling an entity clears the repair
-        at the next rediscovery and disabling one raises it again.
+        Two issues instead of one: a key whose every configured source is disabled
+        has no value at all (a problem), while a disabled entity that merely shadows
+        a working source is a dead fallback lane (worth knowing, not urgent). One
+        repair each means one click each, and the second can simply be ignored.
+
+        Runs on every discovery pass, so enabling an entity clears the repairs at
+        the next rediscovery and disabling one raises them again.
         """
-        entries = [
-            f"`{entity_id}` — {SOURCE_NAMES.get(source, source)}, key `{key}`"
-            for key, per_source in sorted(self.disabled_candidates.items())
-            for source, entity_id in sorted(per_source.items())
-        ]
-
-        if not entries:
-            ir.async_delete_issue(self.hass, DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES)
-            return
-
         critical = critical_disabled_candidates(
             self.candidates, self.disabled_candidates
         )
+        critical_ids = _distinct_ids(critical)
+        fallback_ids = [
+            entity_id
+            for entity_id in _distinct_ids(self.disabled_candidates)
+            if entity_id not in set(critical_ids)
+        ]
+
+        if not critical_ids and not fallback_ids:
+            ir.async_delete_issue(self.hass, DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES)
+            ir.async_delete_issue(self.hass, DOMAIN, ISSUE_DISABLED_FALLBACK_ENTITIES)
+            return
 
         _LOGGER.warning(
-            "%d source entit(y/ies) the hub needs are disabled, so no value can "
-            "ever be read from them: %s",
-            len(entries),
-            ", ".join(entries),
+            "%d source entit(y/ies) the hub needs are disabled: %d with no working "
+            "source left, %d dead fallback lanes",
+            len(critical_ids) + len(fallback_ids),
+            len(critical_ids),
+            len(fallback_ids),
         )
+        self._raise_disabled_issue(
+            ISSUE_DISABLED_SOURCE_ENTITIES,
+            critical_ids,
+            critical,
+            severity=ir.IssueSeverity.WARNING,
+        )
+        self._raise_disabled_issue(
+            ISSUE_DISABLED_FALLBACK_ENTITIES,
+            fallback_ids,
+            {
+                key: per_source
+                for key, per_source in self.disabled_candidates.items()
+                if key not in critical
+            },
+            severity=ir.IssueSeverity.WARNING,
+        )
+
+    def _raise_disabled_issue(
+        self,
+        issue_id: str,
+        entity_ids: list[str],
+        report: dict[str, dict[str, str]],
+        *,
+        severity: ir.IssueSeverity,
+    ) -> None:
+        """Create one repair listing `entity_ids`, or clear it when empty."""
+        if not entity_ids:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+
+        entries = [
+            f"`{entity_id}` — {SOURCE_NAMES.get(source, source)}, key `{key}`"
+            for key, per_source in sorted(report.items())
+            for source, entity_id in sorted(per_source.items())
+        ]
         ir.async_create_issue(
             self.hass,
             DOMAIN,
-            ISSUE_DISABLED_SOURCE_ENTITIES,
+            issue_id,
             is_fixable=True,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key=ISSUE_DISABLED_SOURCE_ENTITIES,
+            severity=severity,
+            translation_key=issue_id,
             # repair data is limited to str/int/float/None: ship the entity IDs
             # newline-joined, the flow splits them again
-            data={
-                "entities": "\n".join(
-                    entity_id
-                    for per_source in self.disabled_candidates.values()
-                    for entity_id in per_source.values()
-                ),
-                "critical_entities": "\n".join(
-                    entity_id
-                    for per_source in critical.values()
-                    for entity_id in per_source.values()
-                ),
-            },
+            data={"entities": "\n".join(entity_ids)},
             translation_placeholders={
-                "count": str(len(entries)),
-                "critical": str(
-                    sum(len(per_source) for per_source in critical.values())
-                ),
+                "count": str(len(entity_ids)),
+                "keys": str(len(report)),
                 "entities": "\n".join(f"- {item}" for item in entries),
             },
             learn_more_url=(

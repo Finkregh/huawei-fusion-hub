@@ -246,12 +246,12 @@ A source is marked offline when more than 80% of its mapped entities are `unavai
 
 The hub reads only entities Home Assistant actually runs. A source entity that is disabled in the entity registry gets no state at all — not `unknown`, simply absent — so the hub still discovers it by unique ID and lists it as a candidate, yet can never read a value from it: the failover it would provide does not exist. This is not a corner case. Source integrations ship most of their non-aggregate registers disabled by default: on one EMMA installation 117 of the 172 `huawei_solar` entities were, and every one of them was disabled by the integration, none by the user.
 
-Discovery therefore reports each canonical key whose resolved entity is disabled: a warning in the log, and a fixable repair issue under **Settings > System > Repairs** listing every entity with the hub key it feeds. **Fix** offers two choices:
+Discovery therefore reports disabled source entities as **two** fixable repairs under **Settings > System > Repairs**, because the two cases cost different things:
 
-- *only the keys with no other working source* — the lanes whose disablement costs a value right now;
-- *every disabled entity in the list* — also restores fallback lanes that are currently dead but not yet needed.
+- **Hub entities have no readable source** — every configured source of those hub entities is disabled, so they cannot produce a value at all. **Fix** enables the entities that are the sole source of those keys.
+- **Fallback source entities are disabled** — another source is supplying the values right now, so nothing is broken; the disabled entity is a fallback lane that will be missing during an outage. **Fix** enables them if you want the failover back, or **ignore** the issue if you would rather not add those entities to your recorder.
 
-Either way the flow enables the entities through the entity registry, which is the same write the switch on the entity page performs — with one explicit confirmation, and reversible at any time. Enabling is also what makes Home Assistant run the entity at all, so it is the only way to read those values. The issue then clears itself at the next rediscovery, because enabling is a registry change and that already triggers one. No hub entity is created or removed either way: the key keeps its entity and starts producing values when a source entity becomes readable.
+Both flows enable entities through the entity registry after a confirmation — the same write the switch on the entity page performs, reversible at any time — and both issues clear themselves at the next rediscovery, because enabling is a registry change and that already triggers one. Enabling is not cosmetic: a disabled entity is never run by Home Assistant, so it has no state to read, which is the only way these values can exist.
 
 This is also how a fallback disappears without any error: with the cloud source offline, a hub entity only fails over to a local source entity that is enabled.
 

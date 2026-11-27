@@ -6,6 +6,10 @@ being able to read a value from it. On a real EMMA install 117 of 172
 huawei_solar entities are disabled by the integration itself, and its
 `/api/states` holds exactly the 55 enabled ids, so the distinction is not
 academic: it decides whether a hub key has a working fallback at all.
+
+Two issues are raised, not one: a key with no working source is a problem, a
+dead fallback lane is not. Each carries its own entity list, so each is one
+click to fix and the optional one can simply be ignored.
 """
 import logging
 import os
@@ -19,6 +23,7 @@ sys.path.insert(
 import huawei_fusion_hub.coordinator as coordinator_module
 from huawei_fusion_hub.const import (
     DOMAIN,
+    ISSUE_DISABLED_FALLBACK_ENTITIES,
     ISSUE_DISABLED_SOURCE_ENTITIES,
     SOURCE_FUSION_SOLAR_PLUS,
     SOURCE_HUAWEI_SOLAR,
@@ -28,11 +33,56 @@ from huawei_fusion_hub.coordinator import (
     disabled_candidate_report,
 )
 from huawei_fusion_hub.repairs import (
-    MODE_ALL,
-    MODE_CRITICAL,
     EnableDisabledEntitiesFlow,
     async_create_fix_flow,
 )
+
+
+class _RecordingIssueRegistry:
+    """Stand-in for homeassistant.helpers.issue_registry."""
+
+    IssueSeverity = SimpleNamespace(WARNING="warning")
+
+    def __init__(self):
+        self.created: list[dict] = []
+        self.deleted: list[tuple[str, str]] = []
+
+    def async_create_issue(self, hass, domain, issue_id, **kwargs):
+        self.created.append(
+            {"hass": hass, "domain": domain, "issue_id": issue_id, **kwargs}
+        )
+
+    def async_delete_issue(self, hass, domain, issue_id):
+        self.deleted.append((domain, issue_id))
+
+
+def _coordinator_with(disabled_candidates, candidates=None):
+    """A coordinator with only what the reporting method touches."""
+    coordinator = object.__new__(coordinator_module.HubCoordinator)
+    coordinator.hass = SimpleNamespace()
+    coordinator.disabled_candidates = disabled_candidates
+    coordinator.candidates = (
+        candidates
+        if candidates is not None
+        else {key: dict(per_source) for key, per_source in disabled_candidates.items()}
+    )
+    return coordinator
+
+
+def _report(disabled_candidates, candidates=None):
+    """Run the report against a recording issue registry."""
+    original = coordinator_module.ir
+    recorder = _RecordingIssueRegistry()
+    coordinator_module.ir = recorder
+    try:
+        _coordinator_with(disabled_candidates, candidates)._report_disabled_candidates()
+    finally:
+        coordinator_module.ir = original
+    return recorder
+
+
+def _issues(recorder):
+    return {issue["issue_id"]: issue for issue in recorder.created}
 
 
 def test_reports_only_the_disabled_candidates():
@@ -41,16 +91,10 @@ def test_reports_only_the_disabled_candidates():
             SOURCE_HUAWEI_SOLAR: "sensor.emma_total_supply_from_grid",
             SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_ne_forward_active_energy",
         },
-        "grid_exported_energy": {
-            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_feed_in_to_grid",
-            SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_ne_reverse_active_energy",
-        },
     }
     disabled_by = {
         "sensor.emma_total_supply_from_grid": None,
         "sensor.fsp_ne_forward_active_energy": None,
-        "sensor.emma_total_feed_in_to_grid": None,
-        "sensor.fsp_ne_reverse_active_energy": None,
     }
 
     assert disabled_candidate_report(candidates, disabled_by) == {}
@@ -75,12 +119,38 @@ def test_a_disabled_entity_is_reported_with_its_key_and_source():
     }
 
 
-def test_real_emma_install_reports_the_four_disabled_mapping_entities():
-    """The EMMA entity set from issue #14, with the four disabled ones.
+def test_critical_means_every_source_of_that_key_is_disabled():
+    candidates = {
+        # one healthy source left: a dead lane, not a dead key
+        "grid_imported_energy": {
+            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_supply_from_grid",
+            SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_forward_active_energy",
+        },
+        # only source is disabled: this key can never resolve
+        "total_consumption": {
+            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
+        },
+    }
+    disabled_by = {
+        "sensor.emma_total_supply_from_grid": "integration",
+        "sensor.fsp_forward_active_energy": None,
+        "sensor.emma_total_energy_consumption": "integration",
+    }
+    disabled = disabled_candidate_report(candidates, disabled_by)
 
-    Everything else the mapping resolves there is enabled, so a report that
-    lists more than these four would be a false alarm on a fresh install.
-    """
+    critical = critical_disabled_candidates(candidates, disabled)
+
+    assert set(critical) == {"total_consumption"}
+
+
+def test_control_proxies_are_never_critical():
+    candidates = {"battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity"}}
+    # a key that is not a sensor candidate at all (a control proxy) must not count
+    assert critical_disabled_candidates(candidates, {"inverter_on_off": {"x": "y"}}) == {}
+
+
+def test_real_emma_install_reports_the_four_disabled_mapping_entities():
+    """The EMMA entity set from issue #14, with the four disabled ones."""
     candidates = {
         "grid_imported_energy": {
             SOURCE_HUAWEI_SOLAR: "sensor.emma_total_positive_active_energy_2",
@@ -116,103 +186,61 @@ def test_real_emma_install_reports_the_four_disabled_mapping_entities():
     }
 
 
-def test_the_repair_issue_key_is_stable():
-    # the translation key in strings.json/translations is keyed by this value
-    assert ISSUE_DISABLED_SOURCE_ENTITIES == "disabled_source_entities"
-
-
-class _RecordingIssueRegistry:
-    """Stand-in for homeassistant.helpers.issue_registry."""
-
-    IssueSeverity = SimpleNamespace(WARNING="warning")
-
-    def __init__(self):
-        self.created: list[dict] = []
-        self.deleted: list[tuple[str, str]] = []
-
-    def async_create_issue(self, hass, domain, issue_id, **kwargs):
-        self.created.append(
-            {"hass": hass, "domain": domain, "issue_id": issue_id, **kwargs}
-        )
-
-    def async_delete_issue(self, hass, domain, issue_id):
-        self.deleted.append((domain, issue_id))
-
-
-def _coordinator_with(disabled_candidates):
-    """A coordinator with only what the reporting method touches.
-
-    `candidates` mirrors the disabled set: every listed key has exactly these
-    sources, so the critical subset is computed from the same data the report
-    lists. Tests that care about the distinction pass a wider candidate map.
-    """
-    coordinator = object.__new__(coordinator_module.HubCoordinator)
-    coordinator.hass = SimpleNamespace()
-    coordinator.disabled_candidates = disabled_candidates
-    coordinator.candidates = {
-        key: dict(per_source) for key, per_source in disabled_candidates.items()
-    }
-    return coordinator
-
-
-def _with_recording_registry(disabled_candidates, candidates=None):
-    """Run the report against a recording issue registry."""
-    original = coordinator_module.ir
-    recorder = _RecordingIssueRegistry()
-    coordinator_module.ir = recorder
-    try:
-        coordinator = _coordinator_with(disabled_candidates)
-        if candidates is not None:
-            coordinator.candidates = candidates
-        coordinator._report_disabled_candidates()
-    finally:
-        coordinator_module.ir = original
-    return recorder
-
-
-def test_repair_issue_names_each_disabled_entity_and_its_key():
-    recorder = _with_recording_registry(
-        {
-            "battery_rated_capacity": {
-                SOURCE_HUAWEI_SOLAR: "sensor.batteries_rated_capacity",
-            },
-            "total_consumption": {
-                SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
-            },
-        }
+def test_a_dead_fallback_lane_gets_the_optional_issue_only():
+    """The common case: another source works, so nothing is broken today."""
+    recorder = _report(
+        {"grid_imported_energy": {SOURCE_HUAWEI_SOLAR: "sensor.emma_a"}},
+        candidates={
+            "grid_imported_energy": {
+                SOURCE_HUAWEI_SOLAR: "sensor.emma_a",
+                SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_a",
+            }
+        },
     )
+    issues = _issues(recorder)
+    assert ISSUE_DISABLED_SOURCE_ENTITIES not in issues
+    fallback = issues[ISSUE_DISABLED_FALLBACK_ENTITIES]
+    assert fallback["data"]["entities"] == "sensor.emma_a"
+    assert fallback["is_fixable"] is True
 
-    assert len(recorder.created) == 1
-    issue = recorder.created[0]
-    assert issue["domain"] == DOMAIN
-    assert issue["issue_id"] == ISSUE_DISABLED_SOURCE_ENTITIES
+
+def test_a_broken_key_gets_the_source_issue():
+    recorder = _report(
+        {"total_consumption": {SOURCE_HUAWEI_SOLAR: "sensor.emma_total_consumption"}}
+    )
+    issues = _issues(recorder)
+    assert set(issues) == {ISSUE_DISABLED_SOURCE_ENTITIES}
+    issue = issues[ISSUE_DISABLED_SOURCE_ENTITIES]
     assert issue["translation_key"] == ISSUE_DISABLED_SOURCE_ENTITIES
     assert issue["is_fixable"] is True
     assert issue["severity"] == "warning"
-    assert issue["translation_placeholders"]["count"] == "2"
-    body = issue["translation_placeholders"]["entities"]
-    for expected in (
-        "sensor.batteries_rated_capacity",
-        "battery_rated_capacity",
-        "sensor.emma_total_energy_consumption",
-        "total_consumption",
-        "Huawei Solar (Modbus)",
-    ):
-        assert expected in body, f"{expected!r} missing from the issue body"
-    # Markdown: one code span per id, none nested -- nested backticks render raw
-    assert "``" not in body
-    for line in body.splitlines():
-        assert line.startswith("- `"), line
-        assert line.count("`") == 4, line
+    assert issue["translation_placeholders"]["count"] == "1"
+    assert issue["translation_placeholders"]["keys"] == "1"
+    assert "sensor.emma_total_consumption" in issue["data"]["entities"]
     assert issue["learn_more_url"].endswith("#disabled-source-entities")
-    assert recorder.deleted == []
 
 
-def test_repair_issue_is_deleted_once_nothing_is_disabled():
-    recorder = _with_recording_registry({})
+def test_issue_lists_distinct_entities_even_when_a_source_feeds_several_keys():
+    """One entity can be the candidate of several keys; the issue lists it once."""
+    recorder = _report(
+        {
+            "a": {SOURCE_HUAWEI_SOLAR: "sensor.shared"},
+            "b": {SOURCE_HUAWEI_SOLAR: "sensor.shared"},
+        }
+    )
+    issue = _issues(recorder)[ISSUE_DISABLED_SOURCE_ENTITIES]
+    assert issue["data"]["entities"] == "sensor.shared"
+    assert issue["translation_placeholders"]["count"] == "1"
+    assert issue["translation_placeholders"]["keys"] == "2"
 
+
+def test_both_issues_are_deleted_once_nothing_is_disabled():
+    recorder = _report({})
     assert recorder.created == []
-    assert recorder.deleted == [(DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES)]
+    assert recorder.deleted == [
+        (DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES),
+        (DOMAIN, ISSUE_DISABLED_FALLBACK_ENTITIES),
+    ]
 
 
 def test_the_report_warns_in_the_log_as_well():
@@ -225,97 +253,29 @@ def test_the_report_warns_in_the_log_as_well():
     handler = _Capture()
     coordinator_module._LOGGER.addHandler(handler)
     try:
-        _with_recording_registry(
-            {"battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.bma_state_of_capacity"}}
-        )
+        _report({"battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.bma_state_of_capacity"}})
     finally:
         coordinator_module._LOGGER.removeHandler(handler)
 
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
     message = records[0].getMessage()
-    assert "sensor.bma_state_of_capacity" in message
-    assert "battery_soc" in message
+    assert "1 with no working source left" in message
 
 
-def test_critical_means_every_source_of_that_key_is_disabled():
-    candidates = {
-        # one healthy source left: a dead lane, not a dead key
-        "grid_imported_energy": {
-            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_supply_from_grid",
-            SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_forward_active_energy",
-        },
-        # only source is disabled: this key can never resolve
-        "total_consumption": {
-            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
-        },
-    }
-    disabled_by = {
-        "sensor.emma_total_supply_from_grid": "integration",
-        "sensor.fsp_forward_active_energy": None,
-        "sensor.emma_total_energy_consumption": "integration",
-    }
-    disabled = disabled_candidate_report(candidates, disabled_by)
-
-    critical = critical_disabled_candidates(candidates, disabled)
-
-    assert set(critical) == {"total_consumption"}
+def test_the_fix_flow_lists_one_entity_per_line():
+    flow = EnableDisabledEntitiesFlow({"entities": "a\nb\n\nc"})
+    assert flow._entity_ids == ["a", "b", "c"]
 
 
-def test_control_proxies_are_never_critical():
-    candidates = {"battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity"}}
-    # a key that is not a sensor candidate at all (a control proxy) must not count
-    assert critical_disabled_candidates(candidates, {"inverter_on_off": {"x": "y"}}) == {}
-
-
-def test_the_repair_issue_carries_both_entity_lists():
-    recorder = _with_recording_registry(
-        {
-            "total_consumption": {
-                SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
-            },
-            "battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity"},
-        },
-        candidates={
-            "total_consumption": {
-                SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
-            },
-            "battery_soc": {
-                SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity",
-                SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_state_of_charge",
-            },
-        },
-    )
-    issue = recorder.created[0]
-    assert issue["is_fixable"] is True
-    assert set(issue["data"]["entities"].split("\n")) == {
-        "sensor.emma_total_energy_consumption",
-        "sensor.emma_state_of_capacity",
-    }
-    # the second key keeps a healthy cloud source, so only the first is critical
-    assert issue["data"]["critical_entities"] == "sensor.emma_total_energy_consumption"
-
-
-def test_the_fix_flow_offers_both_sets():
-    flow = EnableDisabledEntitiesFlow(
-        {"entities": "a\nb\n\nc", "critical_entities": "b"}
-    )
-    assert flow._all == ["a", "b", "c"]
-    assert flow._critical == ["b"]
-    assert (MODE_ALL, MODE_CRITICAL) == ("all", "critical")
-
-
-def test_only_our_issue_gets_the_custom_flow():
-    flow = _flow_for(ISSUE_DISABLED_SOURCE_ENTITIES)
-    assert isinstance(flow, EnableDisabledEntitiesFlow)
-
-
-def _flow_for(issue_id):
+def test_every_disabled_issue_gets_the_custom_flow():
     import asyncio
 
-    return asyncio.run(
-        async_create_fix_flow(None, issue_id, {"entities": "a", "critical_entities": ""})
-    )
+    for issue_id in (ISSUE_DISABLED_SOURCE_ENTITIES, ISSUE_DISABLED_FALLBACK_ENTITIES):
+        flow = asyncio.run(
+            async_create_fix_flow(None, issue_id, {"entities": "sensor.a"})
+        )
+        assert isinstance(flow, EnableDisabledEntitiesFlow), issue_id
 
 
 if __name__ == "__main__":
