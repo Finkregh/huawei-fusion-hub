@@ -242,6 +242,16 @@ A source is marked offline when more than 80% of its mapped entities are `unavai
 
 ---
 
+## Disabled source entities
+
+The hub reads only entities Home Assistant actually runs. A source entity that is disabled in the entity registry gets no state at all — not `unknown`, simply absent — so the hub still discovers it by unique ID and lists it as a candidate, yet can never read a value from it: the failover it would provide does not exist. This is not a corner case. Source integrations ship most of their non-aggregate registers disabled by default: on one EMMA installation 117 of the 172 `huawei_solar` entities were, and every one of them was disabled by the integration, none by the user.
+
+Discovery therefore reports each canonical key whose resolved entity is disabled: a warning in the log, and a repair issue under **Settings > System > Repairs** listing the entity together with the hub key it feeds, so it can be enabled from the entity registry. The issue clears itself at the next rediscovery once the entities are enabled — enabling an entity is a registry change, which already triggers a rediscovery. No hub entity is created or removed either way: the key keeps its entity and starts producing values when a source entity becomes readable.
+
+This is also how a fallback disappears without any error: with the cloud source offline, a hub entity only fails over to a local source entity that is enabled.
+
+---
+
 ## Changelog
 
 See [CHANGELOG.md](https://github.com/giorgioparri/huawei-fusion-hub/blob/HEAD/CHANGELOG.md) for the full version history.
