@@ -1,6 +1,7 @@
 {
   "domain": "huawei_fusion_hub",
   "name": "Huawei Fusion Hub",
+  "categories": ["energy"],
   "codeowners": ["@giorgioparri"],
   "config_flow": true,
   "dependencies": [],
