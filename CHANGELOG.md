@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The hub now reports source entities it can never read. A registry entry that
+  is disabled gets no state at all, so the hub discovers it as a candidate and
+  can never resolve a value from it: the failover it would provide does not
+  exist, silently. Discovery logs a warning and raises a repair issue listing
+  each affected entity with the hub key it feeds, and clears the issue at the
+  next rediscovery once they are enabled. This matters because source
+  integrations ship most non-aggregate registers disabled by default — on one
+  EMMA installation 117 of 172 `huawei_solar` entities were.
+
 ### Fixed
 
 - Cumulative grid energy now falls back to the Huawei Solar (Modbus) EMMA totals

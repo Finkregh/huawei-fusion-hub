@@ -1,4 +1,5 @@
 """Coordinator: discovers source entities, resolves values by priority."""
+
 from __future__ import annotations
 
 import logging
@@ -9,6 +10,7 @@ from typing import Any
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_call_later,
@@ -36,6 +38,7 @@ from .const import (
     DEFAULT_RESERVE_SOC,
     DEVICE_NAMES,
     DOMAIN,
+    ISSUE_DISABLED_SOURCE_ENTITIES,
     KEY_BATTERY_CAPACITY,
     KEY_BATTERY_POWER,
     KEY_BATTERY_SOC,
@@ -119,6 +122,33 @@ def diff_candidates(
     )
 
 
+def disabled_candidate_report(
+    candidates: dict[str, dict[str, str]],
+    disabled_by: dict[str, str | None],
+) -> dict[str, dict[str, str]]:
+    """Canonical keys whose resolved source entity is disabled in the registry.
+
+    A registry entry with `disabled_by` set never gets an entity object, so it
+    has no state at all - not `unknown`, simply absent. The hub discovers by
+    registry, so such an entity stays a candidate forever while never being
+    readable: a dead failover path rather than a value that comes and goes.
+    Especially relevant because source integrations ship most non-aggregate
+    registers disabled by default, so a mapping that looks complete can have no
+    working source on a fresh install.
+
+    Kept free of Home Assistant objects so it can be exercised directly.
+    """
+    report = {
+        key: {
+            source: entity_id
+            for source, entity_id in per_source.items()
+            if disabled_by.get(entity_id)
+        }
+        for key, per_source in candidates.items()
+    }
+    return {key: per_source for key, per_source in report.items() if per_source}
+
+
 class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
     """Event-driven coordinator over already-existing HA entities."""
 
@@ -154,9 +184,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
                 capacity_override=float(
                     entry.options.get(
                         CONF_BATTERY_CAPACITY,
-                        entry.data.get(
-                            CONF_BATTERY_CAPACITY, DEFAULT_BATTERY_CAPACITY
-                        ),
+                        entry.data.get(CONF_BATTERY_CAPACITY, DEFAULT_BATTERY_CAPACITY),
                     )
                 ),
             )
@@ -166,6 +194,9 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         self.candidates: dict[str, dict[str, str]] = {}
         # source -> set of its mapped entity_ids
         self.source_entities: dict[str, set[str]] = {}
+        # canonical_key -> {source: entity_id} for candidates whose registry
+        # entry is disabled, i.e. readable by nobody
+        self.disabled_candidates: dict[str, dict[str, str]] = {}
         # source -> bool (last known availability)
         self.source_available: dict[str, bool] = {}
         # sources for which an offline alert was actually fired this runtime;
@@ -204,6 +235,12 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
                     if device and device.model:
                         model = device.model
                 by_source[entity.platform].append((entity, model))
+
+        # entity_id -> disabled_by, for the report after matching
+        disabled_by = {
+            entity.entity_id: entity.disabled_by
+            for entity in registry.entities.values()
+        }
 
         self.candidates = {}
         self.source_entities = {s: set() for s in self.priority}
@@ -252,9 +289,15 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
                 if per_source:
                     self.control_candidates[control_def.key] = per_source
 
+        self.disabled_candidates = disabled_candidate_report(
+            {**self.candidates, **self.control_candidates}, disabled_by
+        )
+        self._report_disabled_candidates()
+
         _LOGGER.debug(
             "Discovery result: %d sensors, %d controls",
-            len(self.candidates), len(self.control_candidates),
+            len(self.candidates),
+            len(self.control_candidates),
         )
 
     @staticmethod
@@ -375,13 +418,50 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             f"{DEVICE_NAMES[device]}: {n}" for device, n in sorted(counts.items())
         )
 
+    def _report_disabled_candidates(self) -> None:
+        """Log and raise a repair for source entities the hub can never read.
+
+        Runs on every discovery pass, so enabling an entity clears the repair
+        at the next rediscovery and disabling one raises it again.
+        """
+        entries = [
+            f"{entity_id} ({SOURCE_NAMES.get(source, source)}, `{key}`)"
+            for key, per_source in sorted(self.disabled_candidates.items())
+            for source, entity_id in sorted(per_source.items())
+        ]
+
+        if not entries:
+            ir.async_delete_issue(self.hass, DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES)
+            return
+
+        _LOGGER.warning(
+            "%d source entit(y/ies) the hub needs are disabled, so no value can "
+            "ever be read from them: %s",
+            len(entries),
+            ", ".join(entries),
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            ISSUE_DISABLED_SOURCE_ENTITIES,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_DISABLED_SOURCE_ENTITIES,
+            translation_placeholders={
+                "count": str(len(entries)),
+                "entities": "\n".join(f"- `{item}`" for item in entries),
+            },
+            learn_more_url=(
+                "https://github.com/giorgioparri/huawei-fusion-hub"
+                "#disabled-source-entities"
+            ),
+        )
+
     async def _maybe_notify_initial_summary(self) -> None:
         if self._store_data.get("summary_shown"):
             return
         per_source = {
-            source: sum(
-                1 for c in self.candidates.values() if source in c
-            )
+            source: sum(1 for c in self.candidates.values() if source in c)
             for source in self.priority
         }
         source_lines = ", ".join(
@@ -496,9 +576,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         for k in new_keys:
             changed_sources.update(self.candidates[k])
         for k in gained:
-            changed_sources.update(
-                set(self.candidates[k]) - set(old_candidates[k])
-            )
+            changed_sources.update(set(self.candidates[k]) - set(old_candidates[k]))
         source_names = ", ".join(
             SOURCE_NAMES.get(s, s) for s in sorted(changed_sources)
         )
@@ -519,13 +597,13 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             parts.append(texts["rediscovery_gained"].format(n=len(gained)))
         self._notify(
             f"{DOMAIN}_rediscovery",
-            texts["rediscovery"].format(
-                sources=source_names, parts="; ".join(parts)
-            ),
+            texts["rediscovery"].format(sources=source_names, parts="; ".join(parts)),
         )
         _LOGGER.info(
             "Rediscovery: %d new keys, %d gained fallback (%s)",
-            len(new_keys), len(gained), source_names,
+            len(new_keys),
+            len(gained),
+            source_names,
         )
 
     def _notify(self, notification_id: str, message: str) -> None:
