@@ -13,12 +13,11 @@ reactive energy in varh with `total_increasing`, signal strength in dBm, and
 `energy_storage` carrying `measurement` because that is the only state class HA
 permits for it.
 """
+
 import os
 import sys
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(__file__), "..", "custom_components")
-)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "custom_components"))
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.components.sensor.const import (
@@ -91,7 +90,9 @@ def test_energy_storage_entities_are_measurements():
     """HA permits only `measurement` for `energy_storage`; `None` silently did that."""
     for entity_def in SENSOR_DEFS:
         if entity_def.device_class is SensorDeviceClass.ENERGY_STORAGE:
-            assert entity_def.state_class is SensorStateClass.MEASUREMENT, entity_def.key
+            assert entity_def.state_class is SensorStateClass.MEASUREMENT, (
+                entity_def.key
+            )
 
 
 def test_the_audited_triples_are_what_the_mapping_produces():
