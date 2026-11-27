@@ -150,6 +150,23 @@ def disabled_candidate_report(
     return {key: per_source for key, per_source in report.items() if per_source}
 
 
+def critical_disabled_candidates(
+    candidates: dict[str, dict[str, str]],
+    disabled: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    """Keys where *every* configured source is disabled, so no value can resolve.
+
+    Distinguishes "a fallback lane is dead" from "this key has no working source
+    at all". Only the second kind costs the user a value today, so the repair
+    flow offers it as the conservative choice; the rest is opt-in.
+    """
+    return {
+        key: per_source
+        for key, per_source in disabled.items()
+        if key in candidates and set(candidates[key]) <= set(per_source)
+    }
+
+
 class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
     """Event-driven coordinator over already-existing HA entities."""
 
@@ -435,6 +452,10 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             ir.async_delete_issue(self.hass, DOMAIN, ISSUE_DISABLED_SOURCE_ENTITIES)
             return
 
+        critical = critical_disabled_candidates(
+            self.candidates, self.disabled_candidates
+        )
+
         _LOGGER.warning(
             "%d source entit(y/ies) the hub needs are disabled, so no value can "
             "ever be read from them: %s",
@@ -445,11 +466,28 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             self.hass,
             DOMAIN,
             ISSUE_DISABLED_SOURCE_ENTITIES,
-            is_fixable=False,
+            is_fixable=True,
             severity=ir.IssueSeverity.WARNING,
             translation_key=ISSUE_DISABLED_SOURCE_ENTITIES,
+            # repair data is limited to str/int/float/None: ship the entity IDs
+            # newline-joined, the flow splits them again
+            data={
+                "entities": "\n".join(
+                    entity_id
+                    for per_source in self.disabled_candidates.values()
+                    for entity_id in per_source.values()
+                ),
+                "critical_entities": "\n".join(
+                    entity_id
+                    for per_source in critical.values()
+                    for entity_id in per_source.values()
+                ),
+            },
             translation_placeholders={
                 "count": str(len(entries)),
+                "critical": str(
+                    sum(len(per_source) for per_source in critical.values())
+                ),
                 "entities": "\n".join(f"- {item}" for item in entries),
             },
             learn_more_url=(

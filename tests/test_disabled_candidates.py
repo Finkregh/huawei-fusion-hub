@@ -23,7 +23,16 @@ from huawei_fusion_hub.const import (
     SOURCE_FUSION_SOLAR_PLUS,
     SOURCE_HUAWEI_SOLAR,
 )
-from huawei_fusion_hub.coordinator import disabled_candidate_report
+from huawei_fusion_hub.coordinator import (
+    critical_disabled_candidates,
+    disabled_candidate_report,
+)
+from huawei_fusion_hub.repairs import (
+    MODE_ALL,
+    MODE_CRITICAL,
+    EnableDisabledEntitiesFlow,
+    async_create_fix_flow,
+)
 
 
 def test_reports_only_the_disabled_candidates():
@@ -131,20 +140,31 @@ class _RecordingIssueRegistry:
 
 
 def _coordinator_with(disabled_candidates):
-    """A coordinator with only what the reporting method touches."""
+    """A coordinator with only what the reporting method touches.
+
+    `candidates` mirrors the disabled set: every listed key has exactly these
+    sources, so the critical subset is computed from the same data the report
+    lists. Tests that care about the distinction pass a wider candidate map.
+    """
     coordinator = object.__new__(coordinator_module.HubCoordinator)
     coordinator.hass = SimpleNamespace()
     coordinator.disabled_candidates = disabled_candidates
+    coordinator.candidates = {
+        key: dict(per_source) for key, per_source in disabled_candidates.items()
+    }
     return coordinator
 
 
-def _with_recording_registry(disabled_candidates):
-    """Run the report against a recording issue registry, return (issue, records)."""
+def _with_recording_registry(disabled_candidates, candidates=None):
+    """Run the report against a recording issue registry."""
     original = coordinator_module.ir
     recorder = _RecordingIssueRegistry()
     coordinator_module.ir = recorder
     try:
-        _coordinator_with(disabled_candidates)._report_disabled_candidates()
+        coordinator = _coordinator_with(disabled_candidates)
+        if candidates is not None:
+            coordinator.candidates = candidates
+        coordinator._report_disabled_candidates()
     finally:
         coordinator_module.ir = original
     return recorder
@@ -167,7 +187,7 @@ def test_repair_issue_names_each_disabled_entity_and_its_key():
     assert issue["domain"] == DOMAIN
     assert issue["issue_id"] == ISSUE_DISABLED_SOURCE_ENTITIES
     assert issue["translation_key"] == ISSUE_DISABLED_SOURCE_ENTITIES
-    assert issue["is_fixable"] is False
+    assert issue["is_fixable"] is True
     assert issue["severity"] == "warning"
     assert issue["translation_placeholders"]["count"] == "2"
     body = issue["translation_placeholders"]["entities"]
@@ -216,6 +236,86 @@ def test_the_report_warns_in_the_log_as_well():
     message = records[0].getMessage()
     assert "sensor.bma_state_of_capacity" in message
     assert "battery_soc" in message
+
+
+def test_critical_means_every_source_of_that_key_is_disabled():
+    candidates = {
+        # one healthy source left: a dead lane, not a dead key
+        "grid_imported_energy": {
+            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_supply_from_grid",
+            SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_forward_active_energy",
+        },
+        # only source is disabled: this key can never resolve
+        "total_consumption": {
+            SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
+        },
+    }
+    disabled_by = {
+        "sensor.emma_total_supply_from_grid": "integration",
+        "sensor.fsp_forward_active_energy": None,
+        "sensor.emma_total_energy_consumption": "integration",
+    }
+    disabled = disabled_candidate_report(candidates, disabled_by)
+
+    critical = critical_disabled_candidates(candidates, disabled)
+
+    assert set(critical) == {"total_consumption"}
+
+
+def test_control_proxies_are_never_critical():
+    candidates = {"battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity"}}
+    # a key that is not a sensor candidate at all (a control proxy) must not count
+    assert critical_disabled_candidates(candidates, {"inverter_on_off": {"x": "y"}}) == {}
+
+
+def test_the_repair_issue_carries_both_entity_lists():
+    recorder = _with_recording_registry(
+        {
+            "total_consumption": {
+                SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
+            },
+            "battery_soc": {SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity"},
+        },
+        candidates={
+            "total_consumption": {
+                SOURCE_HUAWEI_SOLAR: "sensor.emma_total_energy_consumption",
+            },
+            "battery_soc": {
+                SOURCE_HUAWEI_SOLAR: "sensor.emma_state_of_capacity",
+                SOURCE_FUSION_SOLAR_PLUS: "sensor.fsp_state_of_charge",
+            },
+        },
+    )
+    issue = recorder.created[0]
+    assert issue["is_fixable"] is True
+    assert set(issue["data"]["entities"].split("\n")) == {
+        "sensor.emma_total_energy_consumption",
+        "sensor.emma_state_of_capacity",
+    }
+    # the second key keeps a healthy cloud source, so only the first is critical
+    assert issue["data"]["critical_entities"] == "sensor.emma_total_energy_consumption"
+
+
+def test_the_fix_flow_offers_both_sets():
+    flow = EnableDisabledEntitiesFlow(
+        {"entities": "a\nb\n\nc", "critical_entities": "b"}
+    )
+    assert flow._all == ["a", "b", "c"]
+    assert flow._critical == ["b"]
+    assert (MODE_ALL, MODE_CRITICAL) == ("all", "critical")
+
+
+def test_only_our_issue_gets_the_custom_flow():
+    flow = _flow_for(ISSUE_DISABLED_SOURCE_ENTITIES)
+    assert isinstance(flow, EnableDisabledEntitiesFlow)
+
+
+def _flow_for(issue_id):
+    import asyncio
+
+    return asyncio.run(
+        async_create_fix_flow(None, issue_id, {"entities": "a", "critical_entities": ""})
+    )
 
 
 if __name__ == "__main__":

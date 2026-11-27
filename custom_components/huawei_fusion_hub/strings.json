@@ -107,7 +107,18 @@
     },
     "disabled_source_entities": {
       "title": "Source entities are disabled",
-      "description": "{count} source entity/entities this hub needs are disabled, so no value can ever be read from them and the failover they would provide does not exist:\n\n{entities}\n\nHome Assistant does not run disabled entities at all: they get no state, so the hub reads nothing from them. Source integrations ship most of their per-phase, per-pack and configuration registers disabled by default, so this is normal on a fresh install rather than something you broke.\n\nTo use them, enable the entities under **Settings > Devices & Services > Entities**, filtered by the source integration, then reload Huawei Fusion Hub. Each entry above names the hub key it feeds."
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Enable disabled source entities",
+            "description": "{count} source entities this hub needs are disabled, so no value can be read from them. {critical} of them are the only source for at least one hub entity, which is therefore permanently unavailable.\n\nEnabling an entity makes Home Assistant run it: it starts polling and recording again. Choose what to enable."
+          },
+          "confirm": {
+            "title": "Enable {count} entity/entities?",
+            "description": "These entities will be enabled in the entity registry:\n\n{entities}\n\nYou can disable them again at any time under **Settings > Devices & Services > Entities**."
+          }
+        }
+      }
     }
   },
   "entity": {
@@ -886,6 +897,14 @@
     "button": {
       "battery_stop_forcible_charge": {
         "name": "Stop forcible charge"
+      }
+    }
+  },
+  "selector": {
+    "disabled_entities_mode": {
+      "options": {
+        "critical": "Only the keys with no other working source ({critical})",
+        "all": "Every disabled entity in the list ({count})"
       }
     }
   }

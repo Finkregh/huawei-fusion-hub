@@ -29,6 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   next rediscovery once they are enabled. This matters because source
   integrations ship most non-aggregate registers disabled by default — on one
   EMMA installation 117 of 172 `huawei_solar` entities were.
+- The issue is fixable, because reporting alone leaves the work to the user: the
+  repair flow enables the affected entities through the entity registry after one
+  confirmation, offering either the keys that currently have no working source or
+  the whole list. Enabling is the only way Home Assistant starts running a
+  disabled entity, so it is the actual fix rather than a hint.
 
 ### Fixed
 
