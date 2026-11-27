@@ -21,6 +21,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
+    UnitOfReactiveEnergy,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -84,10 +85,17 @@ _KINDS = {
         UnitOfEnergy.KILO_WATT_HOUR,
     ),
     "energy_storage": (
+        # ENERGY_STORAGE allows only `measurement` in Home Assistant
         SensorDeviceClass.ENERGY_STORAGE,
-        None,
+        SensorStateClass.MEASUREMENT,
         UnitOfEnergy.KILO_WATT_HOUR,
     ),
+    "reactive_energy": (
+        SensorDeviceClass.REACTIVE_ENERGY,
+        SensorStateClass.TOTAL_INCREASING,
+        UnitOfReactiveEnergy.VOLT_AMPERE_REACTIVE_HOUR,
+    ),
+    "signal": (SensorDeviceClass.SIGNAL_STRENGTH, SensorStateClass.MEASUREMENT, "dBm"),
     "voltage": (
         SensorDeviceClass.VOLTAGE,
         SensorStateClass.MEASUREMENT,
@@ -728,7 +736,7 @@ def _build() -> list[HubSensorDef]:
             "meter_reactive_energy",
             "Reactive energy",
             DM,
-            "text",
+            "reactive_energy",
             hs="grid_accumulated_reactive_power",
             icon="mdi:counter",
             diagnostic=True,
@@ -841,7 +849,7 @@ def _build() -> list[HubSensorDef]:
             "meter_wifi_signal_strength",
             "WiFi signal strength",
             DM,
-            "text",
+            "signal",
             fsp=f"{PWS}:15101",
             icon="mdi:wifi",
             diagnostic=True,
@@ -852,7 +860,7 @@ def _build() -> list[HubSensorDef]:
             "meter_signal_strength",
             "Signal strength",
             DM,
-            "text",
+            "signal",
             fsp=f"{PWS}:15102",
             icon="mdi:signal",
             diagnostic=True,

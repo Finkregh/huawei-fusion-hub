@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Three numeric entities were published as plain text sensors, so they rendered
+  as strings, carried no unit and produced no statistics: `meter_reactive_energy`
+  is now reactive energy in `varh` with `total_increasing` (source `kvarh`
+  converted), and `meter_wifi_signal_strength` / `meter_signal_strength` are
+  signal strength in `dBm`.
+- `battery_rated_capacity` carried `energy_storage` with no state class, which
+  Home Assistant does not permit for that device class — it is a `measurement`
+  now. The unit, device class and state class of every entity are asserted
+  against Home Assistant's own tables in `tests/test_mapping_units.py`, so a
+  future mapping change cannot silently publish an unrecordable entity.
+
 ### Added
 
 - The hub now reports source entities it can never read. A registry entry that
