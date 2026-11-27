@@ -1493,6 +1493,17 @@ def _build() -> list[HubSensorDef]:
             fsp=f"{PLT}:pvSelfConsumptionEnergy",
         )
     )
+    # FusionSolarPlus plant `energy` family: totalSelfUseEnergy, totalFeedInEnergy,
+    # totalGridImportEnergy and totalConsumptionEnergy are declared as lifetime
+    # counters but carry TODAY's value in 2.3.6
+    # (JortvanSchijndel/FusionSolarPlus#132). So they may only be used where a
+    # daily number is expected -- and even then they are a fallback that is only
+    # exercised when the local Modbus source is gone, which is exactly the
+    # incident the fallback exists for. `total_consumption` is the one lifetime
+    # key that touches the family: while #132 is open its cloud candidate is a
+    # daily number, its EMMA (Modbus) candidate is the correct lifetime figure.
+    # When #132 is fixed, re-point the `*_today` fallbacks at a genuine daily
+    # signal instead of quietly inheriting lifetime totals.
     d(
         _def(
             "pv_feed_in_energy_today",

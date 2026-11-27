@@ -279,6 +279,18 @@ have been possible.
 | `flow_load_power` | — | `Plant:flow_load_power` | — |
 | `flow_grid_power` | — | `Plant:flow_grid_power` | — |
 
+> **FusionSolarPlus plant `energy` family**: `totalSelfUseEnergy`,
+> `totalFeedInEnergy`, `totalGridImportEnergy` and `totalConsumptionEnergy` are
+> declared as `total_increasing` lifetime counters but report *today's* value in
+> FusionSolarPlus 2.3.6 ([#132](https://github.com/JortvanSchijndel/FusionSolarPlus/issues/132)).
+> Rows above therefore use them only where a daily number is expected, and those
+> are fallback lanes: while Modbus is alive the local `*_today` registers win
+> (`self_used_energy_today` is the exception — FusionSolarPlus is its sole
+> candidate). The coupling only bites during a Modbus outage, when a `_today`
+> key would receive a lifetime number, and it inverts once #132 is fixed.
+> `total_consumption` is the one lifetime key on the family; its EMMA/Modbus
+> candidate is the correct value while #132 is open.
+
 ## EMMA / Smart Assistant (11 entities)
 
 Configuration parameters published by FusionSolarPlus 2.3.5 and later for
