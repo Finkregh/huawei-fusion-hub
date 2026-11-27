@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util.unit_conversion import (
     EnergyConverter,
     PowerConverter,
+    ReactiveEnergyConverter,
     TemperatureConverter,
 )
 
@@ -614,7 +615,12 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         if dst_unit == "var" and src_unit in ("kvar", "kVar"):
             return round(value * 1000, 1)
         try:
-            for converter in (PowerConverter, EnergyConverter, TemperatureConverter):
+            for converter in (
+                PowerConverter,
+                EnergyConverter,
+                ReactiveEnergyConverter,
+                TemperatureConverter,
+            ):
                 if (
                     src_unit in converter.VALID_UNITS
                     and dst_unit in converter.VALID_UNITS

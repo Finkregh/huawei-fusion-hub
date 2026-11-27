@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Cumulative grid energy now falls back to the Modbus EMMA totals (`total_supply_from_grid`, `total_feed_in_to_grid`), which the classic power-meter registers do not provide on EMMA hardware.
+- `battery_rated_capacity` now declares `measurement` (the only state class Home Assistant permits for `energy_storage`), and `meter_reactive_energy` is published as reactive energy in `varh` with `total` instead of as a text sensor.
 
 ## [0.10.0] - 2026-11-04
 
