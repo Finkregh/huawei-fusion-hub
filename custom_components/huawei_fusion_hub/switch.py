@@ -109,7 +109,7 @@ class HubControlProxyBase:
         self.async_write_ha_state()
 
     @callback
-    def _on_source_change(self, _event) -> None:
+    def _on_source_change(self, _event: Any) -> None:
         self.async_write_ha_state()
 
     @property
@@ -117,7 +117,7 @@ class HubControlProxyBase:
         return self._source_entity_id() is not None
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict[str, Any]:
         return {"source_entity": self._source_entity_id()}
 
 

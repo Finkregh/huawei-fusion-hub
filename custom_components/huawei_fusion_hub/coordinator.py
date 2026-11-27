@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -60,7 +61,7 @@ _LOGGER = logging.getLogger(__name__)
 BAD_STATES = ("unavailable", "unknown", None, "")
 
 
-def _as_float(resolved) -> float | None:
+def _as_float(resolved: ResolvedValue | None) -> float | None:
     """Numeric value of a ResolvedValue, or None when missing/non-numeric."""
     if resolved is None or resolved.value is None:
         return None
@@ -122,7 +123,9 @@ def diff_candidates(
 class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
     """Event-driven coordinator over already-existing HA entities."""
 
-    def __init__(self, hass: HomeAssistant, entry, hub_device_id: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, hub_device_id: str
+    ) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
         self.entry = entry
         # registry id of the hub device, which the sub-devices link to
@@ -433,7 +436,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             self.hass, 10, self._async_rediscover
         )
 
-    async def _async_rediscover(self, _now=None) -> None:
+    async def _async_rediscover(self, _now: Any = None) -> None:
         self._rediscover_cancel = None
         old_candidates = {k: dict(v) for k, v in self.candidates.items()}
         old_controls = {k: dict(v) for k, v in self.control_candidates.items()}
@@ -598,7 +601,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         return ResolvedValue(None, None, None)
 
     @staticmethod
-    def _normalize(sensor_def: HubSensorDef, state) -> Any:
+    def _normalize(sensor_def: HubSensorDef, state: State) -> Any:
         """Convert source value to the canonical unit (W, kWh, °C)."""
         raw = state.state
         try:

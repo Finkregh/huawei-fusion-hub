@@ -6,6 +6,8 @@ with English fallback.
 """
 from __future__ import annotations
 
+from homeassistant.core import HomeAssistant
+
 TEXTS: dict[str, dict[str, str]] = {
     "en": {
         "title": "Huawei Fusion Hub",
@@ -105,6 +107,6 @@ TEXTS: dict[str, dict[str, str]] = {
 }
 
 
-def get_texts(hass) -> dict[str, str]:
+def get_texts(hass: HomeAssistant) -> dict[str, str]:
     lang = (hass.config.language or "en").split("-")[0].lower()
     return TEXTS.get(lang, TEXTS["en"])

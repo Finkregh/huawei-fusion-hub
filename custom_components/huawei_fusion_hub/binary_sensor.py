@@ -1,6 +1,8 @@
 """Per-source availability binary sensors."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -52,7 +54,7 @@ class SourceAvailabilitySensor(CoordinatorEntity[HubCoordinator], BinarySensorEn
         return self.coordinator.source_available.get(self._source)
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict[str, Any]:
         return {
             "tracked_entities": sorted(
                 self.coordinator.source_entities.get(self._source, [])

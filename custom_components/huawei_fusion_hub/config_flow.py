@@ -5,7 +5,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -60,7 +60,7 @@ def _derived_schema(
     )
 
 
-def _installed_sources(hass) -> list[str]:
+def _installed_sources(hass: HomeAssistant) -> list[str]:
     """Sources that have at least one loaded config entry."""
     return [
         source

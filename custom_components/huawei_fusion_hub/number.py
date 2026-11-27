@@ -1,6 +1,8 @@
 """Number proxies for source setpoint entities (opt-in)."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -26,7 +28,7 @@ async def async_setup_entry(
 
 
 class HubNumberProxy(HubControlProxyBase, NumberEntity):
-    def _source_attr(self, attr, default=None):
+    def _source_attr(self, attr: str, default: Any = None) -> Any:
         entity_id = self._source_entity_id()
         if not entity_id:
             return default
@@ -59,7 +61,7 @@ class HubNumberProxy(HubControlProxyBase, NumberEntity):
         return self._source_attr("unit_of_measurement")
 
     @property
-    def mode(self):
+    def mode(self) -> str:
         return self._source_attr("mode", "auto")
 
     async def async_set_native_value(self, value: float) -> None:

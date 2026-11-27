@@ -1,6 +1,8 @@
 """Aggregated sensors exposed by the hub."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -33,6 +35,7 @@ from .const import (
     SIGNAL_NEW_KEYS,
 )
 from .coordinator import HubCoordinator
+from .derived import RuntimeEstimate
 from .devices import sub_device_info
 from .mapping import SENSOR_DEFS_BY_KEY, HubSensorDef
 
@@ -100,7 +103,7 @@ class HubSensor(CoordinatorEntity[HubCoordinator], SensorEntity):
         )
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | str | None:
         resolved = self.coordinator.data.get(self._def.key)
         return resolved.value if resolved else None
 
@@ -110,7 +113,7 @@ class HubSensor(CoordinatorEntity[HubCoordinator], SensorEntity):
         return bool(resolved and resolved.value is not None)
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict[str, Any]:
         resolved = self.coordinator.data.get(self._def.key)
         return {
             ATTR_SOURCE: resolved.source if resolved else None,
@@ -141,12 +144,12 @@ class HubDerivedSensor(CoordinatorEntity[HubCoordinator], SensorEntity):
         )
 
     @property
-    def _estimate(self):
+    def _estimate(self) -> RuntimeEstimate | None:
         estimator = self.coordinator.estimator
         return estimator.result if estimator else None
 
     @property
-    def native_value(self):
+    def native_value(self) -> int | None:
         estimate = self._estimate
         if estimate is None:
             return None
@@ -159,7 +162,7 @@ class HubDerivedSensor(CoordinatorEntity[HubCoordinator], SensorEntity):
         return self.native_value is not None
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict[str, Any]:
         estimate = self._estimate
         estimator = self.coordinator.estimator
         if estimate is None or estimator is None:
