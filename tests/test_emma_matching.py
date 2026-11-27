@@ -115,6 +115,10 @@ EXPECTED = {
     "pv_feed_in_energy_today": "feed_in_to_grid_today",
     "imported_grid_energy_today": "supply_from_grid_today",
     "total_consumption": "total_energy_consumption",
+    # cumulative grid energy: without these the meter totals had no Modbus
+    # failover at all, so a cloud outage left them unavailable
+    "grid_imported_energy": "total_supply_from_grid",
+    "grid_exported_energy": "total_feed_in_to_grid",
 }
 
 
@@ -137,8 +141,8 @@ def test_total_emma_coverage_does_not_regress():
         1 for sensor_def in SENSOR_DEFS_BY_KEY.values()
         if HubCoordinator._match(sensor_def, HS, entities)
     )
-    assert matched >= 16, (
-        f"expected at least 16 of the 64 real-world EMMA entities to "
+    assert matched >= 18, (
+        f"expected at least 18 of the 64 real-world EMMA entities to "
         f"resolve, got {matched}"
     )
 
