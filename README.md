@@ -29,6 +29,14 @@ A [Home Assistant](https://www.home-assistant.io/) integration that aggregates d
 ## Features
 
 - **Priority-based failover**: for every quantity, the hub uses the highest-priority source that is currently available. Priority is configurable from the UI at any time — including adding or removing sources.
+
+Values are never blended or averaged across sources, and the order is purely a
+preference: a source ranked first wins even when its reading is minutes old
+(cloud sources publish every few minutes, Modbus every few seconds), so rank the
+local source first if you care about freshness. A `total_increasing` counter
+also steps by the difference between two sources when the provider changes — a
+few Wh between two counters of the same meter, which Home Assistant logs as a
+dip. Only a drop of more than 10 % counts as a meter reset.
 - **232 canonical sensors** — the complete union of quantities from all three sources, including single-source entities. Sensors are grouped into logical devices: **Inverter**, **Battery**, **Battery Unit 1/2**, **Power Meter**, **Plant** and **EMMA**.
 - **Stable entity IDs**: automations and dashboards keep working regardless of which source is active. Every hub sensor exposes `source` and `source_entity` attributes so you always know where the value is coming from.
 - **Automatic unit normalization**: values are converted to canonical units (W, kWh, °C) even when sources report differently (kW vs W, Wh vs kWh).
