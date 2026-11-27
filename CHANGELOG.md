@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Cumulative grid energy now falls back to the Huawei Solar (Modbus) EMMA totals
+  (`total_supply_from_grid`, `total_feed_in_to_grid`, plus the built-in/external
+  `total_positive_active_energy` / `total_negative_active_energy` meters). On an
+  EMMA plant the classic power-meter registers are not the ones carrying these
+  totals, so `grid_imported_energy` and `grid_exported_energy` had **no** Modbus
+  candidate at all: whenever the cloud source went away those two hub entities
+  went `unavailable` for the whole outage instead of failing over, and the
+  backlog landed as a single jump in the energy statistics on recovery. The
+  daily counterparts (`supply_from_grid_today`, `feed_in_to_grid_today`) were
+  already mapped.
+
 ## [0.10.0] - 2026-11-04
 
 ### Changed
