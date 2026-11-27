@@ -179,6 +179,11 @@ def test_repair_issue_names_each_disabled_entity_and_its_key():
         "Huawei Solar (Modbus)",
     ):
         assert expected in body, f"{expected!r} missing from the issue body"
+    # Markdown: one code span per id, none nested -- nested backticks render raw
+    assert "``" not in body
+    for line in body.splitlines():
+        assert line.startswith("- `"), line
+        assert line.count("`") == 4, line
     assert issue["learn_more_url"].endswith("#disabled-source-entities")
     assert recorder.deleted == []
 

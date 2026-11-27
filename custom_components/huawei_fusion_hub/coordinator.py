@@ -426,7 +426,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
         at the next rediscovery and disabling one raises it again.
         """
         entries = [
-            f"{entity_id} ({SOURCE_NAMES.get(source, source)}, `{key}`)"
+            f"`{entity_id}` — {SOURCE_NAMES.get(source, source)}, key `{key}`"
             for key, per_source in sorted(self.disabled_candidates.items())
             for source, entity_id in sorted(per_source.items())
         ]
@@ -450,7 +450,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
             translation_key=ISSUE_DISABLED_SOURCE_ENTITIES,
             translation_placeholders={
                 "count": str(len(entries)),
-                "entities": "\n".join(f"- `{item}`" for item in entries),
+                "entities": "\n".join(f"- {item}" for item in entries),
             },
             learn_more_url=(
                 "https://github.com/giorgioparri/huawei-fusion-hub"
