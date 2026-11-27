@@ -693,3 +693,7 @@ class HubCoordinator(DataUpdateCoordinator[dict[str, ResolvedValue]]):
                 f"{DOMAIN}_{source}_online",
                 texts["online"].format(name=name),
             )
+
+
+# A config entry whose runtime_data is the coordinator
+type HuaweiFusionHubConfigEntry = ConfigEntry[HubCoordinator]

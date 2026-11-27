@@ -4,25 +4,24 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON, EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import DOMAIN, ENTITY_PREFIX, SIGNAL_CONTROLS_CHANGED
-from .coordinator import HubCoordinator
+from .const import ENTITY_PREFIX, SIGNAL_CONTROLS_CHANGED
+from .coordinator import HuaweiFusionHubConfigEntry, HubCoordinator
 from .devices import sub_device_info
 from .mapping import CONTROL_DEFS_BY_KEY, HubControlDef
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HuaweiFusionHubConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: HubCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(
         HubSwitchProxy(coordinator, CONTROL_DEFS_BY_KEY[key])
         for key in coordinator.control_candidates

@@ -27,7 +27,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    DOMAIN,
     KEY_BATTERY_CAPACITY,
     KEY_BATTERY_POWER,
     KEY_BATTERY_SOC,
@@ -113,7 +112,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    coordinator: HubCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
 
     return {
         "entry": {

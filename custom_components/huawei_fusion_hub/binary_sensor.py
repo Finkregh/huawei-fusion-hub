@@ -7,7 +7,6 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -15,15 +14,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEVICE_HUB, DEVICE_NAMES, DOMAIN, ENTITY_PREFIX
-from .coordinator import HubCoordinator
+from .coordinator import HuaweiFusionHubConfigEntry, HubCoordinator
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HuaweiFusionHubConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: HubCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(
         SourceAvailabilitySensor(coordinator, source)
         for source in coordinator.priority

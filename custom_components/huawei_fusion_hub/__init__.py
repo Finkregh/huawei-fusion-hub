@@ -12,7 +12,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .const import DEVICE_HUB, DEVICE_NAMES, DOMAIN, ISSUE_ENTITY_ID_DRIFT
-from .coordinator import HubCoordinator
+from .coordinator import HuaweiFusionHubConfigEntry, HubCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ PLATFORMS = [
 ]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: HuaweiFusionHubConfigEntry
+) -> bool:
     # create the hub device first: sub-devices link to it by its registry id
     device_registry = dr.async_get(hass)
     hub_device = device_registry.async_get_or_create(
@@ -40,7 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = HubCoordinator(hass, entry, hub_device.id)
     await coordinator.async_start()
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _async_check_entity_id_drift(hass, entry)
@@ -101,15 +103,16 @@ def _async_check_entity_id_drift(hass: HomeAssistant, entry: ConfigEntry) -> Non
     )
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator: HubCoordinator = hass.data[DOMAIN][entry.entry_id]
+async def async_unload_entry(
+    hass: HomeAssistant, entry: HuaweiFusionHubConfigEntry
+) -> bool:
+    coordinator = entry.runtime_data
     await coordinator.async_stop()
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_update_listener(
+    hass: HomeAssistant, entry: HuaweiFusionHubConfigEntry
+) -> None:
     await hass.config_entries.async_reload(entry.entry_id)

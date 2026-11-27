@@ -8,7 +8,6 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -28,13 +27,12 @@ from .const import (
     ATTR_SOURCE_ENTITY,
     ATTR_WINDOW_SECONDS,
     DEVICE_BATTERY,
-    DOMAIN,
     ENTITY_PREFIX,
     KEY_TIME_TO_FULL,
     KEY_TIME_TO_MINIMUM,
     SIGNAL_NEW_KEYS,
 )
-from .coordinator import HubCoordinator
+from .coordinator import HuaweiFusionHubConfigEntry, HubCoordinator
 from .derived import RuntimeEstimate
 from .devices import sub_device_info
 from .mapping import SENSOR_DEFS_BY_KEY, HubSensorDef
@@ -42,10 +40,10 @@ from .mapping import SENSOR_DEFS_BY_KEY, HubSensorDef
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HuaweiFusionHubConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: HubCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(
         HubSensor(coordinator, SENSOR_DEFS_BY_KEY[key])
         for key in coordinator.candidates
