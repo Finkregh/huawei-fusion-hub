@@ -71,14 +71,21 @@ have been possible.
 | `pv_2_current` | `pv_02_current` | `Inverter:11005` | `Residential inverter:pv2_i`, `String inverter:pv2_i` |
 | `pv_2_power` | — | `Inverter:11006` | — |
 
+> **For production, use `inverter_total_dc_input_energy`.** It is DC PV energy
+> — no battery, no grid — and matches the PV-only total (`emma_total_pv_energy_yield`),
+> which is why it is the production source in the Energy dashboard. It is
+> deliberately single-source: giving it a plant-level fallback would make it
+> wrong-but-available, which is worse than unavailable.
+>
 > **`inverter_yield_total` is not a production meter across sources.** The
 > Huawei Solar register is the inverter's AC output and keeps counting after
 > dark from battery discharge; the FusionSolarPlus candidate is a plant-scoped
-> total that jumps at night. A `_total` key whose meaning depends on which
-> source is currently winning is unsafe for energy statistics, and a source
-> flip also produces a `total_increasing` reset row that Home Assistant books
-> as production. Do not use it as a PV-yield sensor; the PV-only total is
-> `plant_energy_total` on a Modbus source.
+> total that jumps at night (measured: 48 % of its value booked at night, single
+> jumps of 27.79 and 132.54 kWh at solar altitudes of −36°/−38°). A `_total` key
+> whose meaning depends on which source is winning is unsafe for energy
+> statistics, and a source flip also produces a `total_increasing` reset row
+> that Home Assistant books as production (measured: 215.03 → 440.08 `sum` in
+> one bucket while the state stayed at ~224 kWh).
 
 ## Power Meter (28 entities)
 

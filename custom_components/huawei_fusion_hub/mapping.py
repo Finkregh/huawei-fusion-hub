@@ -512,6 +512,11 @@ def _build() -> list[HubSensorDef]:
     # plant-scoped total that also jumps at night. Same failure mode as #132:
     # which source wins decides what the number means. Kept as-is because
     # changing it would move existing statistics; tracked separately.
+    #
+    # For production use inverter_total_dc_input_energy instead: DC PV energy,
+    # no battery, no grid (it matches the PV-only EMMA total and the Energy
+    # dashboard). It is deliberately single-source - a plant-level fallback would
+    # be wrong-but-available, which is worse than unavailable.
     d(
         _def(
             "inverter_yield_total",
