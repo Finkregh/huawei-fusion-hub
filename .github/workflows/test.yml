@@ -38,3 +38,5 @@ jobs:
         run: python tests/test_emma_matching.py
       - name: Run device info tests
         run: python tests/test_device_info.py
+      - name: Run mapping unit tests
+        run: python tests/test_mapping_units.py

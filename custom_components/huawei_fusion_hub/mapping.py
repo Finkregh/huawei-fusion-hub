@@ -20,6 +20,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
+    UnitOfReactiveEnergy,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -74,7 +75,12 @@ _KINDS = {
     "power": (SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, UnitOfPower.WATT),
     "energy": (SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, UnitOfEnergy.KILO_WATT_HOUR),
     "energy_total": (SensorDeviceClass.ENERGY, SensorStateClass.TOTAL, UnitOfEnergy.KILO_WATT_HOUR),
-    "energy_storage": (SensorDeviceClass.ENERGY_STORAGE, None, UnitOfEnergy.KILO_WATT_HOUR),
+    # ENERGY_STORAGE allows only `measurement` in Home Assistant
+    "energy_storage": (SensorDeviceClass.ENERGY_STORAGE, SensorStateClass.MEASUREMENT, UnitOfEnergy.KILO_WATT_HOUR),
+    # grid_accumulated_reactive_power is GRID_ACCUMULATED_REACTIVE_POWER,
+    # I32Register("kvarh", 100, 37123) in huawei-solar 3.2.4: signed, so the value can
+    # go down and `total` is the correct state class, not `total_increasing`
+    "reactive_energy": (SensorDeviceClass.REACTIVE_ENERGY, SensorStateClass.TOTAL, UnitOfReactiveEnergy.VOLT_AMPERE_REACTIVE_HOUR),
     "voltage": (SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, UnitOfElectricPotential.VOLT),
     "current": (SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, UnitOfElectricCurrent.AMPERE),
     "percent": (None, SensorStateClass.MEASUREMENT, PERCENTAGE),
@@ -314,7 +320,7 @@ def _build() -> list[HubSensorDef]:
            fsp=[f"{PWS}:10009", f"{PWS}:11115", f"{EMMA}:11115"],
            icon="mdi:transmission-tower-export",
            fs=[f"{FS_PWS}:active_cap", f"{FS_GM}:active_cap"]))
-    d(_def("meter_reactive_energy", "Reactive energy", DM, "text",
+    d(_def("meter_reactive_energy", "Reactive energy", DM, "reactive_energy",
            hs="grid_accumulated_reactive_power", icon="mdi:counter", diagnostic=True))
     for ph, (hsv, fspv, hsc, fspc, hsp, fspp) in {
         "a": ("grid_a_voltage",
